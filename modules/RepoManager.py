@@ -1,9 +1,7 @@
-import git
+import re
 import os
 from Logger import Logger
 from datetime import datetime, timedelta
-import traceback
-import os
 import logging
 import requests
 import zipfile
@@ -45,6 +43,7 @@ class GitHubUpdater(Logger):
         self.projectpath = self.find_project_path()
         self.temp_dir = os.path.join(self.projectpath, 'temp_update')
         self.log = Logger()
+        self.logby=__class__
 
     def find_project_path(self):
         """Определение директории проекта"""
@@ -59,7 +58,7 @@ class GitHubUpdater(Logger):
             download_url = f"https://github.com/{self.repo_url}/archive/{self.branch}.zip"
             
             # Загружаем архив
-            self.log.log('Начало загрузки архива...', logging.INFO, 'main.py')
+            self.log.log('Начало загрузки архива...', logging.INFO, f'{self.logby}')
             response = requests.get(download_url, stream=True)
             response.raise_for_status()
 
@@ -73,11 +72,11 @@ class GitHubUpdater(Logger):
                     if chunk:
                         f.write(chunk)
 
-            self.log.log('Архив успешно загружен', logging.INFO, 'main.py')
+            self.log.log('Архив успешно загружен', logging.INFO, f'{self.logby}')
             return zip_path
 
         except requests.exceptions.RequestException as e:
-            self.log.log(f'Ошибка при загрузке архива: {str(e)}', logging.ERROR, 'main.py')
+            self.log.log(f'Ошибка при загрузке архива: {str(e)}', logging.ERROR, f'{self.logby}')
             raise
 
     def backup_current_version(self):
@@ -86,14 +85,14 @@ class GitHubUpdater(Logger):
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             backup_dir = os.path.join(self.projectpath, f'backup_{timestamp}')
             
-            self.log.log('Создание резервной копии...', logging.INFO, 'main.py')
+            self.log.log('Создание резервной копии...', logging.INFO, f'{self.logby}')
             shutil.copytree(self.projectpath, backup_dir, ignore=shutil.ignore_patterns('backup_*', 'temp_update'))
             
-            self.log.log(f'Резервная копия создана в {backup_dir}', logging.INFO, 'main.py')
+            self.log.log(f'Резервная копия создана в {backup_dir}', logging.INFO, f'{self.logby}')
             return backup_dir
 
         except Exception as e:
-            self.log.log(f'Ошибка при создании резервной копии: {str(e)}', logging.ERROR, 'main.py')
+            self.log.log(f'Ошибка при создании резервной копии: {str(e)}', logging.ERROR, f'{self.logby}')
             raise
 
     def update_project(self):
@@ -106,7 +105,7 @@ class GitHubUpdater(Logger):
             backup_path = self.backup_current_version()
 
             # Распаковываем архив
-            self.log.log('Распаковка архива...', logging.INFO, 'main.py')
+            self.log.log('Распаковка архива...', logging.INFO, f'{self.logby}')
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(self.temp_dir)
 
@@ -121,7 +120,7 @@ class GitHubUpdater(Logger):
                 raise Exception("Не удалось найти распакованную директорию")
 
             # Копируем новые файлы в директорию проекта
-            self.log.log('Копирование новых файлов...', logging.INFO, 'main.py')
+            self.log.log('Копирование новых файлов...', logging.INFO, f'{self.logby}')
             for item in os.listdir(extracted_dir):
                 s = os.path.join(extracted_dir, item)
                 d = os.path.join(self.projectpath, item)
@@ -137,13 +136,13 @@ class GitHubUpdater(Logger):
                 else:
                     shutil.copy2(s, d)
 
-            self.log.log('Проект успешно обновлен', logging.INFO, 'main.py')
+            self.log.log('Проект успешно обновлен', logging.INFO, f'{self.logby}')
 
         except Exception as e:
-            self.log.log(f'Ошибка при обновлении проекта: {str(e)}', logging.ERROR, 'main.py')
+            self.log.log(f'Ошибка при обновлении проекта: {str(e)}', logging.ERROR, f'{self.logby}')
             # В случае ошибки восстанавливаем из резервной копии
             if 'backup_path' in locals():
-                self.log.log('Восстановление из резервной копии...', logging.WARNING, 'main.py')
+                self.log.log('Восстановление из резервной копии...', logging.WARNING, f'{self.logby}')
                 shutil.rmtree(self.projectpath)
                 shutil.copytree(backup_path, self.projectpath)
             raise
@@ -167,9 +166,46 @@ class GitHubUpdater(Logger):
                 'message': commit_info['commit']['message']
             }
             
-            self.log.log(f'Получена информация о последнем коммите: {info}', logging.INFO, 'main.py')
             return info
 
         except requests.exceptions.RequestException as e:
-            self.log.log(f'Ошибка при получении информации о коммите: {str(e)}', logging.ERROR, 'main.py')
+            self.log.log(f'Ошибка при получении информации о коммите: {str(e)}', logging.ERROR, f'{self.logby}')
             raise
+
+    def SHA_controller(self,save=False,read=False):
+        """Сохранение SHA для последнего обновления.
+
+        :param save: получить новую версию sha с github Default:False
+        :param read: считать sha проетка Default:False
+        """
+        if save:
+            try:
+                sha= self.get_latest_commit_info()["sha"]
+                with open(f"{self.find_project_path()}/logs/SHA","w") as f:
+                    f.write(sha)
+                self.log.log('SHA сохранен', logging.INFO, f'{self.logby}')
+            except Exception as e:
+                self.log.log(f'Ошибка при сохранении SHA: {str(e)}', logging.ERROR, f'{self.logby}')
+                raise
+        if read:
+            try:
+                with open(f"{self.find_project_path()}/logs/SHA","r") as f:
+                    sha=f.read()
+                return sha
+            except Exception as e:
+                self.log.log(f'Ошибка при чтении SHA: {str(e)}', logging.ERROR, f'{self.logby}')
+                raise
+    def check_for_updates(self):
+        """
+        Проверка наличия новой версии проекта с GitHub
+        
+        """
+        local_sha=self.SHA_controller(read=True)
+        repo_sha=self.get_latest_commit_info()["date"]
+        self.log.log(f"Проверка обновлений... ",logging.INFO,f"{self.logby}")
+        if local_sha != repo_sha:
+            self.log.log(f"Найдена новая версия от {self.get_latest_commit_info()["date"]}",logging.INFO,f"{self.logby}")
+            return True
+        else:
+            self.log.log("Обновлений нет",logging.INFO,f"{self.logby}")
+            return False

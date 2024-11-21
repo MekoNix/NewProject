@@ -1,5 +1,10 @@
 # Changelog
 ## Pre-realise[0.0.3] - 2024-11-21
+### Modified
+- **Модули**:
+
+
+## Pre-realise[0.0.2] - 2024-11-21 
 ### Added
 - **Установочные скрипты**:
   - `install.bat` для Windows
