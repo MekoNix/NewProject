@@ -25,9 +25,7 @@ class FirstStart(Base,GitHubUpdater,Logger):
             self.DisableChatLog()
         else:
             exit("""Папка logs не существует, если install.bat/install.sh есть в папке запустите сначала их, а после программу""")
-start=FirstStart(repourl="owner/repo")
 
-start.DeleteInstallationFiles()
 
     
 
